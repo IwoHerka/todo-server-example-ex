@@ -1,7 +1,7 @@
 defmodule TodoServer do
 
   def start do
-    spawn(fn -> loop(TodoList.new()) end)
+    spawn(TodoServer, :loop, [TodoList.new()])
   end
 
   def add_entry(server_pid, entry) do
@@ -18,7 +18,37 @@ defmodule TodoServer do
     end
   end
 
-  defp loop(todo_list) do
+  def update_entry(server_pid, entry) when is_map(entry) do
+    send(server_pid, {:update_entry, self(), entry})
+
+    receive do
+      :ok -> :ok
+    after
+      5000 -> {:error, :timeout}
+    end
+  end
+
+  def update_entry(server_pid, id, update_fun) do
+    send(server_pid, {:update_entry, self(), id, update_fun})
+
+    receive do
+      :ok -> :ok
+    after
+      5000 -> {:error, :timeout}
+    end
+  end
+
+  def delete_entry(server_pid, id) do
+    send(server_pid, {:delete_entry, self(), id})
+
+    receive do
+      :ok -> :ok
+    after
+      5000 -> {:error, :timeout}
+    end
+  end
+
+  def loop(todo_list) do
     new_todo_list = 
       receive do
         message -> process_message(message, todo_list)
@@ -28,7 +58,6 @@ defmodule TodoServer do
   end
 
   defp process_message({:add_entry, entry}, todo_list) do
-    IO.inspect("Processing add_entry request")
     TodoList.add_entry(todo_list, entry)
   end
 
@@ -38,7 +67,25 @@ defmodule TodoServer do
     todo_list
   end
 
-  defp process_message(_, _) do
+  defp process_message({:update_entry, client_pid, entry}, todo_list) do
+    list = TodoList.update_entry(todo_list, entry)
+    send(client_pid, :ok)
+    list
+  end
+
+  defp process_message({:update_entry, client_pid, id, fun}, todo_list) do
+    list = TodoList.update_entry(todo_list, id, fun)
+    send(client_pid, :ok)
+    list
+  end
+
+  defp process_message({:delete_entry, client_pid, id}, todo_list) do
+    list = TodoList.delete_entry(todo_list, id)
+    send(client_pid, :ok)
+    list
+  end
+
+  defp process_message(m, _) do
     # error
   end
 end
